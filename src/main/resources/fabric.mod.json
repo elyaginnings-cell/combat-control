@@ -1,0 +1,24 @@
+{
+	"schemaVersion": 1,
+	"id": "combatcontrol",
+	"version": "${version}",
+	"name": "Combat Control",
+	"description": "Client combat assists. Cloth Config recommended for the full UI (backslash key). Falls back to built-in menu.",
+	"authors": ["Gatto"],
+	"contact": {},
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": {
+		"client": ["com.gatto.interactiondelay.InteractionDelay"]
+	},
+	"mixins": ["interactiondelay.mixins.json"],
+	"depends": {
+		"fabricloader": ">=0.18.0",
+		"minecraft": "~1.21.11",
+		"java": ">=21"
+	},
+	"suggests": {
+		"cloth-config": "*",
+		"modmenu": "*"
+	}
+}

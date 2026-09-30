@@ -1,0 +1,13 @@
+{
+	"required": true,
+	"package": "com.gatto.interactiondelay.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"MinecraftClientMixin",
+		"GameMenuScreenMixin",
+		"LivingEntityAccessor"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}
