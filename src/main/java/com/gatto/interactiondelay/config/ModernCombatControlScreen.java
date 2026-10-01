@@ -31,7 +31,11 @@ public final class ModernCombatControlScreen extends Screen {
     private static final int GREEN = 0xFF32D583;
     private static final int RED = 0xFFE13B63;
 
-    private final Screen parent;\n    private long animationStartNanos;\n    private float categoryIndicatorY;\n    private float categoryIndicatorTargetY;\n    private float contentProgress;
+    private final Screen parent;
+    private long animationStartNanos;
+    private float categoryIndicatorY;
+    private float categoryIndicatorTargetY;
+    private float contentProgress;
     private final List<Category> categories = List.of(
             new Category("Delays", "Interaction timing"),
             new Category("Anchors", "Anchor controls"),
@@ -44,7 +48,7 @@ public final class ModernCombatControlScreen extends Screen {
     private int selectedCategory;
     private TextFieldWidget search;
     private final List<ButtonWidget> cardButtons = new ArrayList<>();
-    private final List<ButtonWidget> toggleButtons = new ArrayList<>();\n    private long animationStartNanos;\n    private float categoryIndicatorY;\n    private float categoryIndicatorTargetY;\n    private float contentProgress;
+    private final List<ButtonWidget> toggleButtons = new ArrayList<>();
 
     public ModernCombatControlScreen(Screen parent) {
         super(Text.literal("Combat Control"));
@@ -55,6 +59,13 @@ public final class ModernCombatControlScreen extends Screen {
     protected void init() {
         clearChildren();
         cardButtons.clear();
+        if (animationStartNanos == 0L) {
+            animationStartNanos = System.nanoTime();
+        }
+        categoryIndicatorTargetY = 98 + selectedCategory * 39;
+        if (categoryIndicatorY == 0.0f) {
+            categoryIndicatorY = categoryIndicatorTargetY;
+        }
         toggleButtons.clear();
 
         int sidebarX = 28;
@@ -72,7 +83,10 @@ public final class ModernCombatControlScreen extends Screen {
         search.setDrawsBackground(false);
         search.setPlaceholder(Text.literal("Search for any module or feature"));
         search.setMaxLength(64);
-        search.setChangedListener(value -> rebuildCards());
+        search.setChangedListener(value -> {
+            contentProgress = 0.0f;
+            rebuildCards();
+        });
         addDrawableChild(search);
 
         int y = 98;
@@ -83,7 +97,9 @@ public final class ModernCombatControlScreen extends Screen {
                     Text.literal(category.name),
                     b -> {
                         selectedCategory = index;
-                        init();
+                        categoryIndicatorTargetY = 98 + selectedCategory * 39;
+                        contentProgress = 0.0f;
+                        rebuildCards();
                     }
             ).dimensions(sidebarX, y, sidebarWidth, 34).build();
             addDrawableChild(button);
@@ -134,7 +150,7 @@ public final class ModernCombatControlScreen extends Screen {
             int column = i % 2;
             int row = i / 2;
             int x = contentX + column * (cardWidth + gap);
-            int y = top + row * (cardHeight + gap);\n            int animatedY = y + Math.round((1.0f - contentProgress) * 10.0f);
+            int y = top + row * (cardHeight + gap);
 
             ButtonWidget options = ButtonWidget.builder(
                     Text.literal("OPTIONS"),
@@ -233,7 +249,14 @@ public final class ModernCombatControlScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        context.fill(0, 0, width, height, 0x99070A10);
+        float elapsed = (System.nanoTime() - animationStartNanos) / 1_000_000_000.0f;
+        float introProgress = easeOutCubic(Math.min(1.0f, elapsed / 0.30f));
+        contentProgress += (introProgress - contentProgress) * Math.min(1.0f, delta * 0.35f);
+        categoryIndicatorY += (categoryIndicatorTargetY - categoryIndicatorY)
+                * Math.min(1.0f, delta * 0.45f);
+
+        int overlayAlpha = Math.round(0x99 * introProgress);
+        context.fill(0, 0, width, height, (overlayAlpha << 24) | 0x070A10);
 
         int sidebarX = 28;
         int sidebarWidth = 154;
@@ -263,7 +286,7 @@ public final class ModernCombatControlScreen extends Screen {
 
         for (int i = 0; i < categories.size(); i++) {
             if (i == selectedCategory) {
-                int y = 98 + i * 39;
+                int y = Math.round(categoryIndicatorY);
                 context.fill(sidebarX, y, sidebarX + sidebarWidth, y + 34, PURPLE_DARK);
                 context.fill(sidebarX, y, sidebarX + 3, y + 34, PURPLE);
             }
@@ -296,10 +319,15 @@ public final class ModernCombatControlScreen extends Screen {
             int row = i / 2;
             int x = contentX + column * (cardWidth + gap);
             int y = top + row * (cardHeight + gap);
+            float cardDelay = Math.min(0.30f, i * 0.06f);
+            float cardProgress = Math.max(0.0f,
+                    Math.min(1.0f, (contentProgress - cardDelay) / (1.0f - cardDelay)));
+            int animatedY = y + Math.round((1.0f - easeOutCubic(cardProgress)) * 12.0f);
 
             boolean hovered = mouseX >= x && mouseX < x + cardWidth
-                    && mouseY >= y && mouseY < y + cardHeight;
+                    && mouseY >= animatedY && mouseY < animatedY + cardHeight;
 
+            y = animatedY;
             context.fill(x + 2, y + 3, x + cardWidth + 2, y + cardHeight + 3, 0x66000000);
             context.fill(x, y, x + cardWidth, y + cardHeight, hovered ? PANEL_HOVER : CARD);
             context.fill(x, y, x + cardWidth, y + 1, hovered ? PURPLE : CARD_BORDER);
@@ -318,6 +346,11 @@ public final class ModernCombatControlScreen extends Screen {
             context.drawCenteredTextWithShadow(textRenderer, Text.literal(status),
                     x + cardWidth / 2, y + 63, 0xFFFFFFFF);
         }
+    }
+
+    private static float easeOutCubic(float value) {
+        float inverse = 1.0f - value;
+        return 1.0f - inverse * inverse * inverse;
     }
 
     @Override
