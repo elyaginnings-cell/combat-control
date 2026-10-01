@@ -127,7 +127,7 @@ public final class ModernCombatControlScreen extends Screen {
         int top = 84;
         int gap = 12;
         int cardWidth = Math.max(180, (this.width - contentX - 28 - gap) / 2);
-        int cardHeight = 122;
+        int cardHeight = 138;
 
         for (int i = 0; i < cards.size(); i++) {
             ModuleCard card = cards.get(i);
@@ -139,7 +139,7 @@ public final class ModernCombatControlScreen extends Screen {
             ButtonWidget options = ButtonWidget.builder(
                     Text.literal("OPTIONS"),
                     b -> openDetails()
-            ).dimensions(x + 12, y + cardHeight - 31, cardWidth - 24, 22).build();
+            ).dimensions(x + 12, y + cardHeight - 29, cardWidth - 24, 20).build();
             cardButtons.add(options);
             addDrawableChild(options);
 
@@ -152,7 +152,7 @@ public final class ModernCombatControlScreen extends Screen {
                             InteractionDelay.getConfig().save();
                             b.setMessage(Text.literal(statusLabel(card)));
                         }
-                ).dimensions(x + 12, y + 82, cardWidth - 24, 22).build();
+                ).dimensions(x + 12, y + 82, cardWidth - 24, 20).build();
                 toggleButtons.add(toggle);
                 addDrawableChild(toggle);
             }
@@ -288,7 +288,7 @@ public final class ModernCombatControlScreen extends Screen {
         int top = 84;
         int gap = 12;
         int cardWidth = Math.max(180, (width - contentX - 28 - gap) / 2);
-        int cardHeight = 122;
+        int cardHeight = 138;
 
         for (int i = 0; i < cards.size(); i++) {
             ModuleCard card = cards.get(i);
