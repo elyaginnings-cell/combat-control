@@ -31,7 +31,7 @@ public final class ModernCombatControlScreen extends Screen {
     private static final int GREEN = 0xFF32D583;
     private static final int RED = 0xFFE13B63;
 
-    private final Screen parent;
+    private final Screen parent;\n    private long animationStartNanos;\n    private float categoryIndicatorY;\n    private float categoryIndicatorTargetY;\n    private float contentProgress;
     private final List<Category> categories = List.of(
             new Category("Delays", "Interaction timing"),
             new Category("Anchors", "Anchor controls"),
@@ -134,7 +134,7 @@ public final class ModernCombatControlScreen extends Screen {
             int column = i % 2;
             int row = i / 2;
             int x = contentX + column * (cardWidth + gap);
-            int y = top + row * (cardHeight + gap);
+            int y = top + row * (cardHeight + gap);\n            int animatedY = y + Math.round((1.0f - contentProgress) * 10.0f);
 
             ButtonWidget options = ButtonWidget.builder(
                     Text.literal("OPTIONS"),
