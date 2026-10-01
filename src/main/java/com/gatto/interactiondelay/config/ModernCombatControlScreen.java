@@ -1,5 +1,6 @@
 package com.gatto.interactiondelay.config;
 
+import com.gatto.interactiondelay.InteractionDelay;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -9,13 +10,14 @@ import net.minecraft.text.Text;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.BooleanSupplier;
 
 /**
- * Modern visual shell for Combat Control.
+ * Modern Combat Control configuration shell.
  *
- * This screen is intentionally presentation/navigation only. It does not
- * change any gameplay/configuration behavior; the existing configuration
- * screen remains the source of truth for the actual settings.
+ * The cards are backed by the existing InteractionDelayConfig instance.
+ * This screen changes presentation/navigation only; gameplay behavior remains
+ * implemented by the existing handlers.
  */
 public final class ModernCombatControlScreen extends Screen {
     private static final int PURPLE = 0xFFB84DFF;
@@ -39,10 +41,10 @@ public final class ModernCombatControlScreen extends Screen {
             new Category("Misc", "General settings")
     );
 
-    private int selectedCategory = 0;
+    private int selectedCategory;
     private TextFieldWidget search;
-    private List<ButtonWidget> categoryButtons = new ArrayList<>();
-    private List<ButtonWidget> cardButtons = new ArrayList<>();
+    private final List<ButtonWidget> cardButtons = new ArrayList<>();
+    private final List<ButtonWidget> toggleButtons = new ArrayList<>();
 
     public ModernCombatControlScreen(Screen parent) {
         super(Text.literal("Combat Control"));
@@ -52,8 +54,8 @@ public final class ModernCombatControlScreen extends Screen {
     @Override
     protected void init() {
         clearChildren();
-        categoryButtons.clear();
         cardButtons.clear();
+        toggleButtons.clear();
 
         int sidebarX = 28;
         int sidebarWidth = 154;
@@ -71,7 +73,7 @@ public final class ModernCombatControlScreen extends Screen {
         search.setPlaceholder(Text.literal("Search for any module or feature"));
         search.setMaxLength(64);
         search.setChangedListener(value -> rebuildCards());
-        this.addDrawableChild(search);
+        addDrawableChild(search);
 
         int y = 98;
         for (int i = 0; i < categories.size(); i++) {
@@ -84,12 +86,11 @@ public final class ModernCombatControlScreen extends Screen {
                         init();
                     }
             ).dimensions(sidebarX, y, sidebarWidth, 34).build();
-            categoryButtons.add(button);
-            this.addDrawableChild(button);
+            addDrawableChild(button);
             y += 39;
         }
 
-        this.addDrawableChild(ButtonWidget.builder(
+        addDrawableChild(ButtonWidget.builder(
                 Text.literal("Done"),
                 b -> close()
         ).dimensions(this.width - 128, this.height - 38, 100, 24).build());
@@ -101,7 +102,11 @@ public final class ModernCombatControlScreen extends Screen {
         for (ButtonWidget button : cardButtons) {
             remove(button);
         }
+        for (ButtonWidget button : toggleButtons) {
+            remove(button);
+        }
         cardButtons.clear();
+        toggleButtons.clear();
 
         if (search == null) {
             return;
@@ -109,9 +114,12 @@ public final class ModernCombatControlScreen extends Screen {
 
         String query = search.getText().trim().toLowerCase(Locale.ROOT);
         List<ModuleCard> cards = cardsFor(categories.get(selectedCategory));
+
         if (!query.isEmpty()) {
             cards = cards.stream()
-                    .filter(card -> (card.title + " " + card.description).toLowerCase(Locale.ROOT).contains(query))
+                    .filter(card -> (card.title + " " + card.description)
+                            .toLowerCase(Locale.ROOT)
+                            .contains(query))
                     .toList();
         }
 
@@ -132,85 +140,127 @@ public final class ModernCombatControlScreen extends Screen {
                     Text.literal("OPTIONS"),
                     b -> openDetails()
             ).dimensions(x + 12, y + cardHeight - 31, cardWidth - 24, 22).build();
-
             cardButtons.add(options);
-            this.addDrawableChild(options);
+            addDrawableChild(options);
+
+            if (card.toggleable) {
+                ButtonWidget toggle = ButtonWidget.builder(
+                        Text.literal(statusLabel(card)),
+                        b -> {
+                            card.toggle.run();
+                            InteractionDelay.getConfig().validate();
+                            InteractionDelay.getConfig().save();
+                            b.setMessage(Text.literal(statusLabel(card)));
+                        }
+                ).dimensions(x + 12, y + 82, cardWidth - 24, 22).build();
+                toggleButtons.add(toggle);
+                addDrawableChild(toggle);
+            }
         }
     }
 
     private void openDetails() {
-        if (this.client != null) {
-            this.client.setScreen(new InteractionDelayConfigScreen(this));
+        if (client != null) {
+            client.setScreen(new InteractionDelayConfigScreen(this));
         }
     }
 
     private List<ModuleCard> cardsFor(Category category) {
+        InteractionDelayConfig c = InteractionDelay.getConfig();
+
         return switch (category.name) {
             case "Delays" -> List.of(
-                    new ModuleCard("Block Placement", "Configure interaction timing for blocks.", false),
-                    new ModuleCard("Item Delays", "Pearls, firework, chorus, potions and more.", false),
-                    new ModuleCard("Armor & Elytra", "Configure equipment interaction timing.", false)
+                    new ModuleCard("Block Placement", "Configure interaction timing for blocks.",
+                            () -> c.blockPlacementDelay != InteractionDelayConfig.VANILLA, null, false),
+                    new ModuleCard("Item Delays", "Pearls, firework, chorus, potions and more.",
+                            () -> c.enderPearlDelay != InteractionDelayConfig.VANILLA
+                                    || c.windChargeDelay != InteractionDelayConfig.VANILLA
+                                    || c.fireworkDelay != InteractionDelayConfig.VANILLA
+                                    || c.chorusFruitDelay != InteractionDelayConfig.VANILLA
+                                    || c.xpBottleDelay != InteractionDelayConfig.VANILLA
+                                    || c.splashPotionDelay != InteractionDelayConfig.VANILLA
+                                    || c.otherItemDelay != InteractionDelayConfig.VANILLA,
+                            null, false),
+                    new ModuleCard("Armor & Elytra", "Configure equipment interaction timing.",
+                            () -> c.armorDelay != InteractionDelayConfig.VANILLA
+                                    || c.elytraDelay != InteractionDelayConfig.VANILLA,
+                            null, false)
             );
             case "Anchors" -> List.of(
-                    new ModuleCard("Anchor Sequence", "Configure anchor sequence options.", true),
-                    new ModuleCard("Anchor Place Lock", "Configure anchor placement protection.", false),
-                    new ModuleCard("Anchor Timing", "Configure placement and charge timing.", false)
+                    new ModuleCard("Anchor Sequence", "Existing anchor sequence setting.",
+                            () -> c.anchorComboEnabled, () -> c.anchorComboEnabled = !c.anchorComboEnabled, true),
+                    new ModuleCard("Anchor Place Lock", "Existing anchor placement protection.",
+                            () -> c.anchorPlaceLockEnabled, () -> c.anchorPlaceLockEnabled = !c.anchorPlaceLockEnabled, true),
+                    new ModuleCard("Auto Glowstone", "Existing automatic glowstone setting.",
+                            () -> c.anchorAutoGlowstone, () -> c.anchorAutoGlowstone = !c.anchorAutoGlowstone, true)
             );
             case "Crystal" -> List.of(
-                    new ModuleCard("Crystal Place Lock", "Configure crystal placement protection.", false),
-                    new ModuleCard("Crystal Timing", "Configure crystal interaction timing.", false)
+                    new ModuleCard("Crystal Place Lock", "Existing crystal placement protection.",
+                            () -> c.crystalPlaceLockEnabled, () -> c.crystalPlaceLockEnabled = !c.crystalPlaceLockEnabled, true)
             );
             case "Combat" -> List.of(
-                    new ModuleCard("Axe Switch", "Configure the existing axe-switch settings.", true),
-                    new ModuleCard("Double Hit", "Configure the existing double-hit settings.", true),
-                    new ModuleCard("Stun Slam", "Configure the existing stun-slam settings.", true),
-                    new ModuleCard("Auto-Hit", "Configure the existing auto-hit settings.", false)
+                    new ModuleCard("Axe Switch", "Existing axe-switch setting.",
+                            () -> c.axeSwitchEnabled, () -> c.axeSwitchEnabled = !c.axeSwitchEnabled, true),
+                    new ModuleCard("Double Hit", "Existing double-hit setting.",
+                            () -> c.doubleHitEnabled, () -> c.doubleHitEnabled = !c.doubleHitEnabled, true),
+                    new ModuleCard("Stun Slam", "Existing stun-slam setting.",
+                            () -> c.stunSlamEnabled, () -> c.stunSlamEnabled = !c.stunSlamEnabled, true),
+                    new ModuleCard("Auto-Hit", "Existing auto-hit setting.",
+                            () -> c.autoHitEnabled, () -> c.autoHitEnabled = !c.autoHitEnabled, true)
             );
             case "Weapons" -> List.of(
-                    new ModuleCard("Lunge Assist", "Configure existing lunge settings.", true),
-                    new ModuleCard("Mace Assist", "Configure existing mace settings.", true),
-                    new ModuleCard("Sword Assist", "Configure existing sword settings.", false)
+                    new ModuleCard("Lunge Assist", "Existing lunge setting.",
+                            () -> c.lungeSwapEnabled, () -> c.lungeSwapEnabled = !c.lungeSwapEnabled, true),
+                    new ModuleCard("Mace Assist", "Existing mace setting.",
+                            () -> c.maceSwapEnabled, () -> c.maceSwapEnabled = !c.maceSwapEnabled, true),
+                    new ModuleCard("Sword Cooldown", "Existing sword cooldown setting.",
+                            () -> c.swordCooldownAssist, () -> c.swordCooldownAssist = !c.swordCooldownAssist, true),
+                    new ModuleCard("Sword Crit Assist", "Existing sword critical-hit setting.",
+                            () -> c.swordCritAssist, () -> c.swordCritAssist = !c.swordCritAssist, true)
             );
             default -> List.of(
-                    new ModuleCard("Master Enable", "Global Combat Control configuration.", true),
-                    new ModuleCard("Cooldown Reset", "Configure cooldown reset behavior.", true),
-                    new ModuleCard("Interface", "Configure the configuration interface.", false)
+                    new ModuleCard("Master Enable", "Global Combat Control setting.",
+                            () -> c.modEnabled, () -> c.modEnabled = !c.modEnabled, true),
+                    new ModuleCard("Cooldown Reset", "Existing hotbar-swap cooldown setting.",
+                            () -> c.resetCooldownOnSwap, () -> c.resetCooldownOnSwap = !c.resetCooldownOnSwap, true)
             );
         };
     }
 
+    private static String statusLabel(ModuleCard card) {
+        return card.enabled.getAsBoolean() ? "ENABLED" : "DISABLED";
+    }
+
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        context.fill(0, 0, this.width, this.height, 0x99070A10);
+        context.fill(0, 0, width, height, 0x99070A10);
 
         int sidebarX = 28;
         int sidebarWidth = 154;
         int contentX = 200;
 
-        // Main glass panels.
-        context.fill(sidebarX - 4, 20, sidebarX + sidebarWidth + 4, this.height - 20, PANEL);
-        context.fill(contentX - 10, 20, this.width - 24, this.height - 20, PANEL);
+        context.fill(sidebarX - 4, 20, sidebarX + sidebarWidth + 4, height - 20, PANEL);
+        context.fill(contentX - 10, 20, width - 24, height - 20, PANEL);
 
-        // Search field backing.
-        context.fill(contentX, 28, this.width - 28, 56, 0xCC0B0E15);
-        context.fill(contentX, 55, this.width - 28, 56, PURPLE_DARK);
+        context.fill(contentX, 28, width - 28, 56, 0xCC0B0E15);
+        context.fill(contentX, 55, width - 28, 56, PURPLE_DARK);
 
-        context.drawTextWithShadow(this.textRenderer, Text.literal("COMBAT CONTROL"),
+        context.drawTextWithShadow(textRenderer, Text.literal("COMBAT CONTROL"),
                 sidebarX + 12, 40, TEXT);
 
-        context.drawTextWithShadow(this.textRenderer,
+        context.drawTextWithShadow(textRenderer,
                 Text.literal(categories.get(selectedCategory).name.toUpperCase(Locale.ROOT)),
                 contentX, 68, TEXT);
 
-        context.drawTextWithShadow(this.textRenderer,
+        context.drawTextWithShadow(textRenderer,
                 Text.literal(categories.get(selectedCategory).description),
                 contentX + 76, 68, MUTED);
 
         drawCards(context, mouseX, mouseY);
 
-        // Sidebar labels.
-        context.drawTextWithShadow(this.textRenderer, Text.literal("MODULES"),
+        context.drawTextWithShadow(textRenderer, Text.literal("MODULES"),
                 sidebarX + 12, 72, MUTED);
+
         for (int i = 0; i < categories.size(); i++) {
             if (i == selectedCategory) {
                 int y = 98 + i * 39;
@@ -225,16 +275,19 @@ public final class ModernCombatControlScreen extends Screen {
     private void drawCards(DrawContext context, int mouseX, int mouseY) {
         String query = search == null ? "" : search.getText().trim().toLowerCase(Locale.ROOT);
         List<ModuleCard> cards = cardsFor(categories.get(selectedCategory));
+
         if (!query.isEmpty()) {
             cards = cards.stream()
-                    .filter(card -> (card.title + " " + card.description).toLowerCase(Locale.ROOT).contains(query))
+                    .filter(card -> (card.title + " " + card.description)
+                            .toLowerCase(Locale.ROOT)
+                            .contains(query))
                     .toList();
         }
 
         int contentX = 200;
         int top = 84;
         int gap = 12;
-        int cardWidth = Math.max(180, (this.width - contentX - 28 - gap) / 2);
+        int cardWidth = Math.max(180, (width - contentX - 28 - gap) / 2);
         int cardHeight = 122;
 
         for (int i = 0; i < cards.size(); i++) {
@@ -251,15 +304,18 @@ public final class ModernCombatControlScreen extends Screen {
             context.fill(x, y, x + cardWidth, y + cardHeight, hovered ? PANEL_HOVER : CARD);
             context.fill(x, y, x + cardWidth, y + 1, hovered ? PURPLE : CARD_BORDER);
 
-            context.drawTextWithShadow(this.textRenderer, Text.literal(card.title),
+            context.drawTextWithShadow(textRenderer, Text.literal(card.title),
                     x + 12, y + 13, TEXT);
-            context.drawText(this.textRenderer, Text.literal(card.description),
+            context.drawText(textRenderer, Text.literal(card.description),
                     x + 12, y + 32, MUTED);
 
-            int statusColor = card.enabled ? GREEN : RED;
-            String status = card.enabled ? "ENABLED" : "DISABLED";
-            context.fill(x + 12, y + 56, x + cardWidth - 12, y + 78, statusColor);
-            context.drawCenteredTextWithShadow(this.textRenderer, Text.literal(status),
+            int statusColor = card.enabled.getAsBoolean() ? GREEN : RED;
+            String status = card.toggleable ? statusLabel(card)
+                    : (card.enabled.getAsBoolean() ? "CUSTOM" : "VANILLA");
+
+            context.fill(x + 12, y + 56, x + cardWidth - 12, y + 78,
+                    card.toggleable ? statusColor : 0xFF3A3E4C);
+            context.drawCenteredTextWithShadow(textRenderer, Text.literal(status),
                     x + cardWidth / 2, y + 63, 0xFFFFFFFF);
         }
     }
@@ -271,12 +327,20 @@ public final class ModernCombatControlScreen extends Screen {
 
     @Override
     public void close() {
-        com.gatto.interactiondelay.InteractionDelay.getConfig().save();
-        if (this.client != null) {
-            this.client.setScreen(parent);
+        InteractionDelay.getConfig().validate();
+        InteractionDelay.getConfig().save();
+        if (client != null) {
+            client.setScreen(parent);
         }
     }
 
     private record Category(String name, String description) {}
-    private record ModuleCard(String title, String description, boolean enabled) {}
+
+    private record ModuleCard(
+            String title,
+            String description,
+            BooleanSupplier enabled,
+            Runnable toggle,
+            boolean toggleable
+    ) {}
 }
