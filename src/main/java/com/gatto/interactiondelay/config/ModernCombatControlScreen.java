@@ -44,7 +44,7 @@ public final class ModernCombatControlScreen extends Screen {
     private int selectedCategory;
     private TextFieldWidget search;
     private final List<ButtonWidget> cardButtons = new ArrayList<>();
-    private final List<ButtonWidget> toggleButtons = new ArrayList<>();
+    private final List<ButtonWidget> toggleButtons = new ArrayList<>();\n    private long animationStartNanos;\n    private float categoryIndicatorY;\n    private float categoryIndicatorTargetY;\n    private float contentProgress;
 
     public ModernCombatControlScreen(Screen parent) {
         super(Text.literal("Combat Control"));
